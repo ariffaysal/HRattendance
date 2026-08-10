@@ -293,15 +293,16 @@ function PricingCard({
           </li>
         ))}
       </ul>
-      <button
-        className={`w-full py-3 rounded-xl font-semibold transition-all duration-300 ${
+      <Link
+        href="/register"
+        className={`block w-full py-3 rounded-xl font-semibold text-center transition-all duration-300 ${
           isPopular
             ? 'bg-gradient-to-r from-neon-blue to-neon-purple text-white hover:shadow-lg hover:shadow-neon-blue/30'
             : 'bg-white/10 text-white hover:bg-white/20 border border-white/20'
         }`}
       >
         Get Started
-      </button>
+      </Link>
     </motion.div>
   );
 }
@@ -654,7 +655,7 @@ export default function SkyviewLanding() {
       </section>
 
       {/* Footer */}
-      <footer className="relative py-16 border-t border-white/10">
+      <footer id="contact" className="relative py-16 border-t border-white/10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid md:grid-cols-4 gap-12 mb-12">
             <div className="md:col-span-2">
