@@ -1,0 +1,7 @@
+node_modules
+dist
+*.log
+.env
+uploads/employees/*
+!uploads/employees/.gitkeep
+attendance_cache.csv
