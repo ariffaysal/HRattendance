@@ -1,0 +1,28 @@
+# Environment
+.env
+
+# Dependencies
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+
+# Build outputs
+backend/dist/
+backend/uploads/
+uploads/
+
+frontend/.next/
+
+# IDE and tooling
+.freebuff/
+.windsurf/
+
+# TypeScript build artifacts
+*.tsbuildinfo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temp uploads
+backend/uploads/temp/

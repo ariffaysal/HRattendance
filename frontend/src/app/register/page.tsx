@@ -78,9 +78,25 @@ export default function RegisterPage() {
       return;
     }
 
-    // Validate password length
-    if (formData.password.length < 6) {
-      setError('Password must be at least 6 characters');
+    // Validate password strength
+    if (formData.password.length < 8) {
+      setError('Password must be at least 8 characters');
+      return;
+    }
+    if (!/[a-z]/.test(formData.password)) {
+      setError('Password must include at least one lowercase letter');
+      return;
+    }
+    if (!/[A-Z]/.test(formData.password)) {
+      setError('Password must include at least one uppercase letter');
+      return;
+    }
+    if (!/\d/.test(formData.password)) {
+      setError('Password must include at least one number');
+      return;
+    }
+    if (!/[^A-Za-z0-9]/.test(formData.password)) {
+      setError('Password must include at least one special character');
       return;
     }
 
@@ -242,9 +258,9 @@ export default function RegisterPage() {
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400/50 focus:ring-2 focus:ring-cyan-400/20 transition-all pr-12"
-                  placeholder="Create a password (min 6 characters)"
+                  placeholder="Create a password (min 8 characters with uppercase, lowercase, number & special char)"
                   required
-                  minLength={6}
+                  minLength={8}
                 />
                 <button
                   type="button"
