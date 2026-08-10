@@ -1,5 +1,6 @@
+-- Employee Policy Tagging Table (PostgreSQL)
 CREATE TABLE IF NOT EXISTS employee_policy_tagging (
-  id INT AUTO_INCREMENT PRIMARY KEY,
+  id SERIAL PRIMARY KEY,
   emp_code VARCHAR(50) NOT NULL,
   emp_id VARCHAR(50) NULL,
   emp_name VARCHAR(100) NULL,
@@ -11,7 +12,7 @@ CREATE TABLE IF NOT EXISTS employee_policy_tagging (
   section VARCHAR(100) NULL,
   subsection VARCHAR(100) NULL,
   designation VARCHAR(100) NULL,
-  
+
   -- Policy Fields
   overtime_policy_rule VARCHAR(50) NULL,
   overtime_policy_date DATE NULL,
@@ -45,9 +46,11 @@ CREATE TABLE IF NOT EXISTS employee_policy_tagging (
   service_benefit_policy_date DATE NULL,
   hd_deduct_rule_rule VARCHAR(50) NULL,
   hd_deduct_rule_date DATE NULL,
-  
+
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  INDEX idx_emp_code (emp_code),
-  UNIQUE KEY unique_emp_code (emp_code)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+  CONSTRAINT unique_policy_tagging_emp_code UNIQUE (emp_code)
+);
+
+CREATE INDEX IF NOT EXISTS idx_employee_policy_tagging_emp_code ON employee_policy_tagging (emp_code);

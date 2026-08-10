@@ -1,0 +1,31 @@
+# PostgreSQL for the Attendance System - run with Docker Desktop:
+#   docker compose up -d
+#
+# Default credentials match backend/.env.example:
+#   host: localhost  port: 5432  db: attendance_db  user: postgres  password: postgres
+#
+# The schema is created automatically on the FIRST start (empty volume).
+# To re-initialize from scratch: docker compose down -v && docker compose up -d
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: attendance-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: attendance_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/database/init-postgres.sql:/docker-entrypoint-initdb.d/01-init-postgres.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d attendance_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:

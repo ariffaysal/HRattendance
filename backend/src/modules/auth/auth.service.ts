@@ -1,9 +1,8 @@
 import { Injectable, Inject, ConflictException, UnauthorizedException } from '@nestjs/common';
-import * as mysql from 'mysql2/promise';
 import * as crypto from 'crypto';
 import * as bcrypt from 'bcryptjs';
 import { JwtService } from '@nestjs/jwt';
-import { SQL_CONNECTION } from '../../database/database.module';
+import { PgConnection, SQL_CONNECTION } from '../../database/database.module';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 
@@ -11,7 +10,7 @@ import { LoginDto } from './dto/login.dto';
 export class AuthService {
   constructor(
     @Inject(SQL_CONNECTION)
-    private connection: mysql.Connection,
+    private connection: PgConnection,
     private readonly jwtService: JwtService,
   ) {}
 
@@ -26,7 +25,7 @@ export class AuthService {
 
     // Check if employee_id already exists
     const [existingEmployee] = await this.connection.execute(
-      'SELECT id FROM auth_users WHERE employee_id = ?',
+      'SELECT id FROM auth_users WHERE employee_id = $1',
       [employeeId],
     );
 
@@ -36,7 +35,7 @@ export class AuthService {
 
     // Check if email already exists
     const [existingEmail] = await this.connection.execute(
-      'SELECT id FROM auth_users WHERE email = ?',
+      'SELECT id FROM auth_users WHERE email = $1',
       [email],
     );
 
@@ -49,7 +48,7 @@ export class AuthService {
 
     // Insert new user
     await this.connection.execute(
-      'INSERT INTO auth_users (employee_id, email, mobile_number, password_hash) VALUES (?, ?, ?, ?)',
+      'INSERT INTO auth_users (employee_id, email, mobile_number, password_hash) VALUES ($1, $2, $3, $4)',
       [employeeId, email, mobileNumber, passwordHash],
     );
 
@@ -64,7 +63,7 @@ export class AuthService {
 
     // Find user by employee_id
     const [users] = await this.connection.execute(
-      'SELECT id, employee_id, email, mobile_number, password_hash, is_active FROM auth_users WHERE employee_id = ?',
+      'SELECT id, employee_id, email, mobile_number, password_hash, is_active FROM auth_users WHERE employee_id = $1',
       [employeeId],
     );
 
@@ -86,7 +85,7 @@ export class AuthService {
       if (user.password_hash === this.legacyHashPassword(password)) {
         const upgradedHash = await bcrypt.hash(password, 10);
         await this.connection.execute(
-          'UPDATE auth_users SET password_hash = ? WHERE id = ?',
+          'UPDATE auth_users SET password_hash = $1 WHERE id = $2',
           [upgradedHash, user.id],
         );
       } else {
@@ -96,7 +95,7 @@ export class AuthService {
 
     // Update last login
     await this.connection.execute(
-      'UPDATE auth_users SET last_login = CURRENT_TIMESTAMP WHERE id = ?',
+      'UPDATE auth_users SET last_login = CURRENT_TIMESTAMP WHERE id = $1',
       [user.id],
     );
 
@@ -119,7 +118,7 @@ export class AuthService {
 
   async validateUser(employeeId: string) {
     const [users] = await this.connection.execute(
-      'SELECT id, employee_id, email, mobile_number, is_active FROM auth_users WHERE employee_id = ?',
+      'SELECT id, employee_id, email, mobile_number, is_active FROM auth_users WHERE employee_id = $1',
       [employeeId],
     );
 

@@ -1,12 +1,11 @@
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
-import * as mysql from 'mysql2/promise';
-import { SQL_CONNECTION } from '../../database/database.module';
+import { PgConnection, SQL_CONNECTION } from '../../database/database.module';
 import { CreateEmployeeEducationDto, UpdateEmployeeEducationDto } from './dto/create-employee-education.dto';
 
 @Injectable()
 export class EmployeeEducationService {
   constructor(
-    @Inject(SQL_CONNECTION) private connection: mysql.Connection,
+    @Inject(SQL_CONNECTION) private connection: PgConnection,
   ) {}
 
   // Transform snake_case DB results to camelCase for API
@@ -43,7 +42,7 @@ export class EmployeeEducationService {
     const params: any[] = [];
 
     if (search) {
-      query += ' WHERE emp_code LIKE ? OR emp_name LIKE ? OR course_name LIKE ? OR institution LIKE ?';
+      query += ' WHERE emp_code LIKE $1 OR emp_name LIKE $2 OR course_name LIKE $3 OR institution LIKE $4';
       const searchTerm = `%${search}%`;
       params.push(searchTerm, searchTerm, searchTerm, searchTerm);
     }
@@ -56,7 +55,7 @@ export class EmployeeEducationService {
 
   async findOne(id: number): Promise<any> {
     const [rows] = await this.connection.execute(
-      'SELECT * FROM employee_education WHERE id = ?',
+      'SELECT * FROM employee_education WHERE id = $1',
       [id],
     );
     
@@ -69,7 +68,7 @@ export class EmployeeEducationService {
 
   async findByEmpCode(empCode: string): Promise<any[]> {
     const [rows] = await this.connection.execute(
-      'SELECT * FROM employee_education WHERE emp_code = ? ORDER BY created_at DESC',
+      'SELECT * FROM employee_education WHERE emp_code = $1 ORDER BY created_at DESC',
       [empCode],
     );
     
@@ -83,7 +82,8 @@ export class EmployeeEducationService {
         emp_code, emp_id, emp_name, category, company, location, division, department, 
         section, subsection, designation, course_name, board, institution, discipline, 
         major_subject, year, result, education_nature
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+      RETURNING id
     `;
 
     const values = [
@@ -108,8 +108,8 @@ export class EmployeeEducationService {
       dto.educationNature || 'Academic',
     ];
 
-    const [result] = await this.connection.execute(sql, values);
-    const insertId = (result as mysql.OkPacket).insertId;
+    const [rows] = await this.connection.execute(sql, values);
+    const insertId = (rows as any[])[0].id;
     return this.findOne(insertId);
   }
 
@@ -117,33 +117,33 @@ export class EmployeeEducationService {
     await this.findOne(id);
     
     const [existingRows] = await this.connection.execute(
-      'SELECT * FROM employee_education WHERE id = ?',
+      'SELECT * FROM employee_education WHERE id = $1',
       [id],
     );
     const rawExisting = (existingRows as any[])[0];
 
     const sql = `
       UPDATE employee_education SET
-        emp_code = ?,
-        emp_id = ?,
-        emp_name = ?,
-        category = ?,
-        company = ?,
-        location = ?,
-        division = ?,
-        department = ?,
-        section = ?,
-        subsection = ?,
-        designation = ?,
-        course_name = ?,
-        board = ?,
-        institution = ?,
-        discipline = ?,
-        major_subject = ?,
-        year = ?,
-        result = ?,
-        education_nature = ?
-      WHERE id = ?
+        emp_code = $1,
+        emp_id = $2,
+        emp_name = $3,
+        category = $4,
+        company = $5,
+        location = $6,
+        division = $7,
+        department = $8,
+        section = $9,
+        subsection = $10,
+        designation = $11,
+        course_name = $12,
+        board = $13,
+        institution = $14,
+        discipline = $15,
+        major_subject = $16,
+        year = $17,
+        result = $18,
+        education_nature = $19
+      WHERE id = $20
     `;
 
     const values = [
@@ -176,7 +176,7 @@ export class EmployeeEducationService {
   async remove(id: number): Promise<void> {
     await this.findOne(id);
     await this.connection.execute(
-      'DELETE FROM employee_education WHERE id = ?',
+      'DELETE FROM employee_education WHERE id = $1',
       [id],
     );
   }

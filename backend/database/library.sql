@@ -1,21 +1,22 @@
--- Library: Policies Table
+-- Library: Policies Table (PostgreSQL)
 CREATE TABLE IF NOT EXISTS library_policies (
-  id INT AUTO_INCREMENT PRIMARY KEY,
+  id SERIAL PRIMARY KEY,
   policy_code VARCHAR(50) NOT NULL UNIQUE,
   policy_name VARCHAR(200) NOT NULL,
   description TEXT NULL,
   category VARCHAR(100) NULL,
   is_active BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  INDEX idx_policy_code (policy_code),
-  INDEX idx_category (category),
-  INDEX idx_is_active (is_active)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_library_policies_policy_code ON library_policies (policy_code);
+CREATE INDEX IF NOT EXISTS idx_library_policies_category ON library_policies (category);
+CREATE INDEX IF NOT EXISTS idx_library_policies_is_active ON library_policies (is_active);
 
 -- Library: Policy Rules Table
 CREATE TABLE IF NOT EXISTS library_policy_rules (
-  id INT AUTO_INCREMENT PRIMARY KEY,
+  id SERIAL PRIMARY KEY,
   policy_id INT NOT NULL,
   rule_code VARCHAR(50) NOT NULL,
   rule_name VARCHAR(200) NOT NULL,
@@ -26,12 +27,14 @@ CREATE TABLE IF NOT EXISTS library_policy_rules (
   effective_date DATE NULL,
   expiry_date DATE NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY (policy_id) REFERENCES library_policies(id) ON DELETE CASCADE,
-  UNIQUE KEY unique_policy_rule (policy_id, rule_code),
-  INDEX idx_rule_code (rule_code),
-  INDEX idx_is_active (is_active)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_policy_rules_policy FOREIGN KEY (policy_id)
+      REFERENCES library_policies (id) ON DELETE CASCADE,
+  CONSTRAINT unique_policy_rule UNIQUE (policy_id, rule_code)
+);
+
+CREATE INDEX IF NOT EXISTS idx_library_policy_rules_rule_code ON library_policy_rules (rule_code);
+CREATE INDEX IF NOT EXISTS idx_library_policy_rules_is_active ON library_policy_rules (is_active);
 
 -- Insert default policies
 INSERT INTO library_policies (policy_code, policy_name, description, category) VALUES
@@ -53,34 +56,34 @@ INSERT INTO library_policies (policy_code, policy_name, description, category) V
 ('HD_DEDUCT', 'HD Deduct Rule', 'Half-day deduction calculation', 'Deductions');
 
 -- Insert default rules for each policy
-INSERT INTO library_policy_rules (policy_id, rule_code, rule_name, description) 
-SELECT 
-  id as policy_id,
-  'RULE_1' as rule_code,
-  'Rule 1' as rule_name,
-  'Standard rule - Default configuration' as description
+INSERT INTO library_policy_rules (policy_id, rule_code, rule_name, description)
+SELECT
+  id AS policy_id,
+  'RULE_1' AS rule_code,
+  'Rule 1' AS rule_name,
+  'Standard rule - Default configuration' AS description
 FROM library_policies;
 
-INSERT INTO library_policy_rules (policy_id, rule_code, rule_name, description) 
-SELECT 
-  id as policy_id,
-  'RULE_2' as rule_code,
-  'Rule 2' as rule_name,
-  'Secondary rule - Alternative configuration' as description
+INSERT INTO library_policy_rules (policy_id, rule_code, rule_name, description)
+SELECT
+  id AS policy_id,
+  'RULE_2' AS rule_code,
+  'Rule 2' AS rule_name,
+  'Secondary rule - Alternative configuration' AS description
 FROM library_policies;
 
-INSERT INTO library_policy_rules (policy_id, rule_code, rule_name, description) 
-SELECT 
-  id as policy_id,
-  'RULE_3' as rule_code,
-  'Rule 3' as rule_name,
-  'Special case rule - Exception handling' as description
+INSERT INTO library_policy_rules (policy_id, rule_code, rule_name, description)
+SELECT
+  id AS policy_id,
+  'RULE_3' AS rule_code,
+  'Rule 3' AS rule_name,
+  'Special case rule - Exception handling' AS description
 FROM library_policies;
 
-INSERT INTO library_policy_rules (policy_id, rule_code, rule_name, description) 
-SELECT 
-  id as policy_id,
-  'NA' as rule_code,
-  'N/A' as rule_name,
-  'Not Applicable - Policy does not apply' as description
+INSERT INTO library_policy_rules (policy_id, rule_code, rule_name, description)
+SELECT
+  id AS policy_id,
+  'NA' AS rule_code,
+  'N/A' AS rule_name,
+  'Not Applicable - Policy does not apply' AS description
 FROM library_policies;

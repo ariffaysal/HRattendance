@@ -1,12 +1,11 @@
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
-import * as mysql from 'mysql2/promise';
-import { SQL_CONNECTION } from '../../database/database.module';
+import { PgConnection, SQL_CONNECTION } from '../../database/database.module';
 import { CreateEmployeeAddressDto, UpdateEmployeeAddressDto } from './dto/create-employee-address.dto';
 
 @Injectable()
 export class EmployeeAddressesService {
   constructor(
-    @Inject(SQL_CONNECTION) private connection: mysql.Connection,
+    @Inject(SQL_CONNECTION) private connection: PgConnection,
   ) {}
 
   // Transform snake_case DB results to camelCase for API
@@ -54,7 +53,7 @@ export class EmployeeAddressesService {
     const params: any[] = [];
 
     if (search) {
-      query += ' WHERE emp_code LIKE ? OR present_district LIKE ? OR permanent_district LIKE ?';
+      query += ' WHERE emp_code LIKE $1 OR present_district LIKE $2 OR permanent_district LIKE $3';
       const searchTerm = `%${search}%`;
       params.push(searchTerm, searchTerm, searchTerm);
     }
@@ -67,7 +66,7 @@ export class EmployeeAddressesService {
 
   async findOne(id: number): Promise<any> {
     const [rows] = await this.connection.execute(
-      'SELECT * FROM employee_addresses WHERE id = ?',
+      'SELECT * FROM employee_addresses WHERE id = $1',
       [id],
     );
     
@@ -80,7 +79,7 @@ export class EmployeeAddressesService {
 
   async findByEmpCode(empCode: string): Promise<any | null> {
     const [rows] = await this.connection.execute(
-      'SELECT * FROM employee_addresses WHERE emp_code = ?',
+      'SELECT * FROM employee_addresses WHERE emp_code = $1',
       [empCode],
     );
     
@@ -102,7 +101,8 @@ export class EmployeeAddressesService {
         present_district, present_division_geo, present_land_phone, present_cell_phone, present_email,
         is_same_as_present, permanent_village_area, permanent_house_no, permanent_road_no, permanent_post_office_code,
         permanent_thana, permanent_district, permanent_division_geo, permanent_land_phone, permanent_cell_phone, permanent_email
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
+      RETURNING id
     `;
 
     const values = [
@@ -138,8 +138,8 @@ export class EmployeeAddressesService {
       dto.permanentEmail || null,
     ];
 
-    const [result] = await this.connection.execute(sql, values);
-    const insertId = (result as mysql.OkPacket).insertId;
+    const [rows] = await this.connection.execute(sql, values);
+    const insertId = (rows as any[])[0].id;
     return this.findOne(insertId);
   }
 
@@ -148,7 +148,7 @@ export class EmployeeAddressesService {
     
     // Get raw row for update
     const [existingRows] = await this.connection.execute(
-      'SELECT * FROM employee_addresses WHERE id = ?',
+      'SELECT * FROM employee_addresses WHERE id = $1',
       [id],
     );
     const rawExisting = (existingRows as any[])[0];
@@ -163,38 +163,39 @@ export class EmployeeAddressesService {
 
     const sql = `
       UPDATE employee_addresses SET
-        emp_code = ?,
-        category = ?,
-        company = ?,
-        location = ?,
-        division_org = ?,
-        department = ?,
-        section = ?,
-        subsection = ?,
-        designation = ?,
-        present_village_area = ?,
-        present_house_no = ?,
-        present_road_no = ?,
-        present_post_office_code = ?,
-        present_thana = ?,
-        present_district = ?,
-        present_division_geo = ?,
-        present_land_phone = ?,
-        present_cell_phone = ?,
-        present_email = ?,
-        is_same_as_present = ?,
-        permanent_village_area = ?,
-        permanent_house_no = ?,
-        permanent_road_no = ?,
-        permanent_post_office_code = ?,
-        permanent_thana = ?,
-        permanent_district = ?,
-        permanent_division_geo = ?,
-        permanent_land_phone = ?,
-        permanent_cell_phone = ?,
-        permanent_email = ?
-      WHERE id = ?
+        emp_code = $1,
+        category = $2,
+        company = $3,
+        location = $4,
+        division_org = $5,
+        department = $6,
+        section = $7,
+        subsection = $8,
+        designation = $9,
+        present_village_area = $10,
+        present_house_no = $11,
+        present_road_no = $12,
+        present_post_office_code = $13,
+        present_thana = $14,
+        present_district = $15,
+        present_division_geo = $16,
+        present_land_phone = $17,
+        present_cell_phone = $18,
+        present_email = $19,
+        is_same_as_present = $20,
+        permanent_village_area = $21,
+        permanent_house_no = $22,
+        permanent_road_no = $23,
+        permanent_post_office_code = $24,
+        permanent_thana = $25,
+        permanent_district = $26,
+        permanent_division_geo = $27,
+        permanent_land_phone = $28,
+        permanent_cell_phone = $29,
+        permanent_email = $30
+      WHERE id = $31
     `;
+
 
     const values = [
       dto.empCode || rawExisting.emp_code,
@@ -237,7 +238,7 @@ export class EmployeeAddressesService {
   async remove(id: number): Promise<void> {
     await this.findOne(id); // Check if exists
     await this.connection.execute(
-      'DELETE FROM employee_addresses WHERE id = ?',
+      'DELETE FROM employee_addresses WHERE id = $1',
       [id],
     );
   }

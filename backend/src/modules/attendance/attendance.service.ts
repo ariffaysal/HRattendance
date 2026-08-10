@@ -3,8 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as csv from 'fast-csv';
-import * as mysql from 'mysql2/promise';
-import { SQL_CONNECTION } from '../../database/database.module';
+import { PgConnection, SQL_CONNECTION } from '../../database/database.module';
 import { ATTENDANCE_COLUMNS, ATTENDANCE_INDEX, CACHE_FILENAME } from '../../config/attendance.config';
 import {
   AttendanceRecord,
@@ -23,7 +22,7 @@ export class AttendanceService {
   private readonly cachePath: string;
 
   constructor(
-    @Inject(SQL_CONNECTION) private readonly db: mysql.Connection,
+    @Inject(SQL_CONNECTION) private readonly db: PgConnection,
     private readonly configService: ConfigService,
   ) {
     this.cachePath = path.join(process.cwd(), CACHE_FILENAME);
@@ -54,14 +53,17 @@ export class AttendanceService {
         })
         .on('end', async () => {
           try {
-            // Batch insert in chunks to stay well below MySQL's placeholder limits
-            const columns = ATTENDANCE_COLUMNS.map(c => `\`${c}\``).join(', ');
+            // Batch insert in chunks to stay well below PostgreSQL's parameter limits (65535)
+            const columns = ATTENDANCE_COLUMNS.map(c => `"${c}"`).join(', ');
             const BATCH_SIZE = 200;
             const rows = recordsToInsert.map(record => record.slice(1));
             for (let i = 0; i < rows.length; i += BATCH_SIZE) {
               const chunk = rows.slice(i, i + BATCH_SIZE);
               const placeholders = chunk
-                .map(() => `(${ATTENDANCE_COLUMNS.map(() => '?').join(', ')})`)
+                .map((_, rowIdx) => {
+                  const offset = rowIdx * ATTENDANCE_COLUMNS.length;
+                  return `(${ATTENDANCE_COLUMNS.map((_, colIdx) => `$${offset + colIdx + 1}`).join(', ')})`;
+                })
                 .join(', ');
               const sqlStr = `INSERT INTO logs (${columns}) VALUES ${placeholders}`;
               await this.db.execute(sqlStr, chunk.flat());
@@ -94,7 +96,7 @@ export class AttendanceService {
     const { where, params } = this.buildFilterQuery(dto);
 
     const [countRows] = await this.db.execute(
-      `SELECT COUNT(*) AS total FROM logs WHERE 1=1 ${where}`,
+      `SELECT COUNT(*)::int AS total FROM logs WHERE 1=1 ${where}`,
       params,
     );
     const total = Number((countRows as any[])[0]?.total || 0);
@@ -103,7 +105,7 @@ export class AttendanceService {
     const offset = (currentPage - 1) * perPage;
 
     const [rows] = await this.db.execute(
-      `SELECT * FROM logs WHERE 1=1 ${where} ORDER BY \`Date\` DESC, \`No.\` ASC LIMIT ? OFFSET ?`,
+      `SELECT * FROM logs WHERE 1=1 ${where} ORDER BY "Date" DESC, "No." ASC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
       [...params, perPage, offset],
     );
 
@@ -207,21 +209,23 @@ export class AttendanceService {
     const searchTerms = dto.search ? dto.search.split(',').map(s => s.trim()).filter(s => s) : [];
     let where = '';
     const params: any[] = [];
+    let paramIndex = 0;
+    const nextParam = () => `$${++paramIndex}`;
 
     if (searchTerms.length > 0) {
       const searchConditions: string[] = [];
       for (const term of searchTerms) {
         switch (dto.searchType) {
           case 'general':
-            searchConditions.push('(`Name` LIKE ? OR `No.` = ?)');
+            searchConditions.push(`("Name" LIKE ${nextParam()} OR "No." = ${nextParam()})`);
             params.push(`%${term}%`, term);
             break;
           case 'emp_no':
-            searchConditions.push('`Emp No.` = ?');
+            searchConditions.push(`"Emp No." = ${nextParam()}`);
             params.push(term);
             break;
           case 'acc_no':
-            searchConditions.push('`AC-No.` = ?');
+            searchConditions.push(`"AC-No." = ${nextParam()}`);
             params.push(term);
             break;
         }
@@ -232,7 +236,7 @@ export class AttendanceService {
     }
 
     if (dto.fromDate && dto.toDate) {
-      where += ' AND `Date` >= ? AND `Date` <= ?';
+      where += ` AND "Date" >= ${nextParam()} AND "Date" <= ${nextParam()}`;
       params.push(dto.fromDate, dto.toDate);
     }
 
@@ -257,7 +261,7 @@ export class AttendanceService {
 
     try {
       const [rows] = await this.db.execute(
-        `SELECT * FROM logs WHERE 1=1 ${where} ORDER BY \`Date\` DESC, \`No.\` ASC`,
+        `SELECT * FROM logs WHERE 1=1 ${where} ORDER BY "Date" DESC, "No." ASC`,
         params,
       );
       return (rows as any[]).map(row => this.mapRow(row));

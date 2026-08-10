@@ -1,6 +1,5 @@
 import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
-import * as mysql from 'mysql2/promise';
-import { SQL_CONNECTION } from '../../database/database.module';
+import { PgConnection, SQL_CONNECTION } from '../../database/database.module';
 import { getAllEmployeeFields } from '../../config/employee.config';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 
@@ -51,7 +50,7 @@ export interface Employee {
 export class EmployeesService {
   private readonly fields: string[];
 
-  constructor(@Inject(SQL_CONNECTION) private readonly db: mysql.Connection) {
+  constructor(@Inject(SQL_CONNECTION) private readonly db: PgConnection) {
     this.fields = getAllEmployeeFields();
   }
 
@@ -60,7 +59,7 @@ export class EmployeesService {
     const values: any[] = [];
 
     if (search) {
-      query += ' WHERE full_name_english LIKE ? OR emp_code LIKE ? OR emp_id LIKE ?';
+      query += ' WHERE full_name_english LIKE $1 OR emp_code LIKE $2 OR emp_id LIKE $3';
       const searchTerm = `%${search}%`;
       values.push(searchTerm, searchTerm, searchTerm);
     }
@@ -73,7 +72,7 @@ export class EmployeesService {
 
   async findById(id: number): Promise<Employee | null> {
     const [rows] = await this.db.execute(
-      'SELECT * FROM employees WHERE id = ?',
+      'SELECT * FROM employees WHERE id = $1',
       [id]
     );
     const employees = rows as Employee[];
@@ -83,7 +82,7 @@ export class EmployeesService {
   async create(dto: CreateEmployeeDto): Promise<Employee> {
     // Check for duplicates
     const [existingNationalId] = await this.db.execute(
-      'SELECT id FROM employees WHERE national_id = ?',
+      'SELECT id FROM employees WHERE national_id = $1',
       [dto.national_id]
     );
     if ((existingNationalId as any[]).length > 0) {
@@ -91,7 +90,7 @@ export class EmployeesService {
     }
 
     const [existingMobile] = await this.db.execute(
-      'SELECT id FROM employees WHERE mobile_no = ?',
+      'SELECT id FROM employees WHERE mobile_no = $1',
       [dto.mobile_no]
     );
     if ((existingMobile as any[]).length > 0) {
@@ -99,18 +98,17 @@ export class EmployeesService {
     }
 
     const fields = this.fields;
-    const placeholders = fields.map(() => '?').join(', ');
+    const placeholders = fields.map((_, i) => `$${i + 1}`).join(', ');
     // Filter out 'undefined' string values that come from FormData conversion
     const values = fields.map(field => {
       const val = dto[field as keyof CreateEmployeeDto];
       return val !== undefined && val !== null && val !== 'undefined' ? val : '';
     });
 
-    const query = `INSERT INTO employees (${fields.join(', ')}, created_at) VALUES (${placeholders}, NOW())`;
+    const query = `INSERT INTO employees (${fields.join(', ')}, created_at) VALUES (${placeholders}, NOW()) RETURNING id`;
 
-    const [result] = await this.db.execute(query, values);
-    const insertResult = result as mysql.ResultSetHeader;
-    const newId = insertResult.insertId;
+    const [rows] = await this.db.execute(query, values);
+    const newId = (rows as any[])[0].id;
 
     return this.findById(newId) as Promise<Employee>;
   }
@@ -124,7 +122,7 @@ export class EmployeesService {
     // Check for duplicates (exclude current employee)
     if (dto.national_id && dto.national_id !== existing.national_id) {
       const [existingNationalId] = await this.db.execute(
-        'SELECT id FROM employees WHERE national_id = ? AND id != ?',
+        'SELECT id FROM employees WHERE national_id = $1 AND id != $2',
         [dto.national_id, id]
       );
       if ((existingNationalId as any[]).length > 0) {
@@ -134,7 +132,7 @@ export class EmployeesService {
 
     if (dto.mobile_no && dto.mobile_no !== existing.mobile_no) {
       const [existingMobile] = await this.db.execute(
-        'SELECT id FROM employees WHERE mobile_no = ? AND id != ?',
+        'SELECT id FROM employees WHERE mobile_no = $1 AND id != $2',
         [dto.mobile_no, id]
       );
       if ((existingMobile as any[]).length > 0) {
@@ -143,7 +141,7 @@ export class EmployeesService {
     }
 
     const fields = this.fields;
-    const setClause = fields.map(field => `${field} = ?`).join(', ');
+    const setClause = fields.map((field, i) => `${field} = $${i + 1}`).join(', ');
     
     // Merge existing values with new values - preserve existing if new value is empty/undefined
     const values = fields.map(field => {
@@ -156,13 +154,12 @@ export class EmployeesService {
     });
     values.push(id.toString());
 
-    const query = `UPDATE employees SET ${setClause}, updated_at = NOW() WHERE id = ?`;
+    const query = `UPDATE employees SET ${setClause}, updated_at = NOW() WHERE id = $${fields.length + 1}`;
 
     try {
-      const [result] = await this.db.execute(query, values);
-      const updateResult = result as mysql.ResultSetHeader;
-      
-      if (updateResult.affectedRows === 0) {
+      const [, result] = await this.db.execute(query, values);
+
+      if (result.rowCount === 0) {
         throw new Error('Database update failed - no rows affected');
       }
     } catch (dbError) {
@@ -179,6 +176,6 @@ export class EmployeesService {
       throw new NotFoundException('Employee not found');
     }
 
-    await this.db.execute('DELETE FROM employees WHERE id = ?', [id]);
+    await this.db.execute('DELETE FROM employees WHERE id = $1', [id]);
   }
 }

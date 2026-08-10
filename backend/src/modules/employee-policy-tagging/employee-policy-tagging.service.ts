@@ -1,12 +1,11 @@
 import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
-import * as mysql from 'mysql2/promise';
-import { SQL_CONNECTION } from '../../database/database.module';
+import { PgConnection, SQL_CONNECTION } from '../../database/database.module';
 import { CreatePolicyTaggingDto, UpdatePolicyTaggingDto } from './dto/create-policy-tagging.dto';
 
 @Injectable()
 export class EmployeePolicyTaggingService {
   constructor(
-    @Inject(SQL_CONNECTION) private connection: mysql.Connection,
+    @Inject(SQL_CONNECTION) private connection: PgConnection,
   ) {}
 
   // Transform snake_case DB results to camelCase for API
@@ -68,7 +67,7 @@ export class EmployeePolicyTaggingService {
     const params: any[] = [];
 
     if (search) {
-      query += ' WHERE emp_code LIKE ? OR emp_name LIKE ? OR emp_id LIKE ?';
+      query += ' WHERE emp_code LIKE $1 OR emp_name LIKE $2 OR emp_id LIKE $3';
       const searchTerm = `%${search}%`;
       params.push(searchTerm, searchTerm, searchTerm);
     }
@@ -81,7 +80,7 @@ export class EmployeePolicyTaggingService {
 
   async findOne(id: number): Promise<any> {
     const [rows] = await this.connection.execute(
-      'SELECT * FROM employee_policy_tagging WHERE id = ?',
+      'SELECT * FROM employee_policy_tagging WHERE id = $1',
       [id],
     );
 
@@ -94,7 +93,7 @@ export class EmployeePolicyTaggingService {
 
   async findByEmpCode(empCode: string): Promise<any | null> {
     const [rows] = await this.connection.execute(
-      'SELECT * FROM employee_policy_tagging WHERE emp_code = ?',
+      'SELECT * FROM employee_policy_tagging WHERE emp_code = $1',
       [empCode],
     );
 
@@ -128,7 +127,8 @@ export class EmployeePolicyTaggingService {
         early_out_deduction_policy_rule, early_out_deduction_policy_date,
         service_benefit_policy_rule, service_benefit_policy_date,
         hd_deduct_rule_rule, hd_deduct_rule_date
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43)
+      RETURNING id
     `;
 
     const values = [
@@ -177,8 +177,8 @@ export class EmployeePolicyTaggingService {
       dto.hdDeductRuleDate || null,
     ];
 
-    const [result] = await this.connection.execute(sql, values);
-    const insertId = (result as mysql.OkPacket).insertId;
+    const [rows] = await this.connection.execute(sql, values);
+    const insertId = (rows as any[])[0].id;
     return this.findOne(insertId);
   }
 
@@ -187,7 +187,7 @@ export class EmployeePolicyTaggingService {
 
     // Get raw row for update
     const [existingRows] = await this.connection.execute(
-      'SELECT * FROM employee_policy_tagging WHERE id = ?',
+      'SELECT * FROM employee_policy_tagging WHERE id = $1',
       [id],
     );
     const rawExisting = (existingRows as any[])[0];
@@ -202,50 +202,50 @@ export class EmployeePolicyTaggingService {
 
     const sql = `
       UPDATE employee_policy_tagging SET
-        emp_code = ?,
-        emp_id = ?,
-        emp_name = ?,
-        category = ?,
-        company = ?,
-        location = ?,
-        division = ?,
-        department = ?,
-        section = ?,
-        subsection = ?,
-        designation = ?,
-        overtime_policy_rule = ?,
-        overtime_policy_date = ?,
-        holiday_incentive_rule = ?,
-        holiday_incentive_date = ?,
-        duty_roster_policy_rule = ?,
-        duty_roster_policy_date = ?,
-        leave_policy_rule = ?,
-        leave_policy_date = ?,
-        maternity_leave_policy_rule = ?,
-        maternity_leave_policy_date = ?,
-        attendance_bonus_policy_rule = ?,
-        attendance_bonus_policy_date = ?,
-        absent_deduction_policy_rule = ?,
-        absent_deduction_policy_date = ?,
-        late_deduction_policy_rule = ?,
-        late_deduction_policy_date = ?,
-        bonus_policy_rule = ?,
-        bonus_policy_date = ?,
-        tax_policy_rule = ?,
-        tax_policy_date = ?,
-        shift_policy_rule = ?,
-        shift_policy_date = ?,
-        tiffin_bill_policy_rule = ?,
-        tiffin_bill_policy_date = ?,
-        allowance_policy_rule = ?,
-        allowance_policy_date = ?,
-        early_out_deduction_policy_rule = ?,
-        early_out_deduction_policy_date = ?,
-        service_benefit_policy_rule = ?,
-        service_benefit_policy_date = ?,
-        hd_deduct_rule_rule = ?,
-        hd_deduct_rule_date = ?
-      WHERE id = ?
+        emp_code = $1,
+        emp_id = $2,
+        emp_name = $3,
+        category = $4,
+        company = $5,
+        location = $6,
+        division = $7,
+        department = $8,
+        section = $9,
+        subsection = $10,
+        designation = $11,
+        overtime_policy_rule = $12,
+        overtime_policy_date = $13,
+        holiday_incentive_rule = $14,
+        holiday_incentive_date = $15,
+        duty_roster_policy_rule = $16,
+        duty_roster_policy_date = $17,
+        leave_policy_rule = $18,
+        leave_policy_date = $19,
+        maternity_leave_policy_rule = $20,
+        maternity_leave_policy_date = $21,
+        attendance_bonus_policy_rule = $22,
+        attendance_bonus_policy_date = $23,
+        absent_deduction_policy_rule = $24,
+        absent_deduction_policy_date = $25,
+        late_deduction_policy_rule = $26,
+        late_deduction_policy_date = $27,
+        bonus_policy_rule = $28,
+        bonus_policy_date = $29,
+        tax_policy_rule = $30,
+        tax_policy_date = $31,
+        shift_policy_rule = $32,
+        shift_policy_date = $33,
+        tiffin_bill_policy_rule = $34,
+        tiffin_bill_policy_date = $35,
+        allowance_policy_rule = $36,
+        allowance_policy_date = $37,
+        early_out_deduction_policy_rule = $38,
+        early_out_deduction_policy_date = $39,
+        service_benefit_policy_rule = $40,
+        service_benefit_policy_date = $41,
+        hd_deduct_rule_rule = $42,
+        hd_deduct_rule_date = $43
+      WHERE id = $44
     `;
 
     const values = [
@@ -302,7 +302,7 @@ export class EmployeePolicyTaggingService {
   async remove(id: number): Promise<void> {
     await this.findOne(id);
     await this.connection.execute(
-      'DELETE FROM employee_policy_tagging WHERE id = ?',
+      'DELETE FROM employee_policy_tagging WHERE id = $1',
       [id],
     );
   }

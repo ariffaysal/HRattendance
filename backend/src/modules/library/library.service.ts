@@ -1,23 +1,22 @@
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
-import * as mysql from 'mysql2/promise';
-import { SQL_CONNECTION } from '../../database/database.module';
+import { PgConnection, SQL_CONNECTION } from '../../database/database.module';
 
 @Injectable()
 export class LibraryService {
-  constructor(@Inject(SQL_CONNECTION) private readonly db: mysql.Connection) {}
+  constructor(@Inject(SQL_CONNECTION) private readonly db: PgConnection) {}
 
   // Policies
   async getAllPolicies(search?: string) {
     let query = `
       SELECT 
         p.*,
-        COUNT(r.id) as rule_count
+        COUNT(r.id)::int as rule_count
       FROM library_policies p
       LEFT JOIN library_policy_rules r ON p.id = r.policy_id
     `;
     
     if (search) {
-      query += ` WHERE p.policy_name LIKE ? OR p.policy_code LIKE ? OR p.category LIKE ?`;
+      query += ` WHERE p.policy_name LIKE $1 OR p.policy_code LIKE $2 OR p.category LIKE $3`;
     }
     
     query += ` GROUP BY p.id ORDER BY p.policy_name`;
@@ -29,7 +28,7 @@ export class LibraryService {
 
   async getPolicyById(id: number) {
     const [rows] = await this.db.execute(
-      'SELECT * FROM library_policies WHERE id = ?',
+      'SELECT * FROM library_policies WHERE id = $1',
       [id],
     );
     const policies = rows as any[];
@@ -40,10 +39,11 @@ export class LibraryService {
   }
 
   async createPolicy(data: any) {
-    const [result] = await this.db.execute(
+    const [rows] = await this.db.execute(
       `INSERT INTO library_policies 
        (policy_code, policy_name, description, category, is_active) 
-       VALUES (?, ?, ?, ?, ?)`,
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id`,
       [
         data.policy_code,
         data.policy_name,
@@ -54,7 +54,7 @@ export class LibraryService {
     );
     
     // Create default rules for the policy
-    const policyId = (result as any).insertId;
+    const policyId = (rows as any[])[0].id;
     await this.createDefaultRules(policyId);
     
     return { id: policyId, ...data };
@@ -63,9 +63,9 @@ export class LibraryService {
   async updatePolicy(id: number, data: any) {
     await this.db.execute(
       `UPDATE library_policies 
-       SET policy_code = ?, policy_name = ?, description = ?, 
-           category = ?, is_active = ?
-       WHERE id = ?`,
+       SET policy_code = $1, policy_name = $2, description = $3, 
+           category = $4, is_active = $5
+       WHERE id = $6`,
       [
         data.policy_code,
         data.policy_name,
@@ -81,7 +81,7 @@ export class LibraryService {
   async deletePolicy(id: number) {
     // Rules will be deleted automatically due to ON DELETE CASCADE
     await this.db.execute(
-      'DELETE FROM library_policies WHERE id = ?',
+      'DELETE FROM library_policies WHERE id = $1',
       [id],
     );
     return { success: true };
@@ -91,7 +91,7 @@ export class LibraryService {
   async getRulesByPolicy(policyId: number) {
     const [rows] = await this.db.execute(
       `SELECT * FROM library_policy_rules 
-       WHERE policy_id = ? 
+       WHERE policy_id = $1 
        ORDER BY rule_code`,
       [policyId],
     );
@@ -99,10 +99,11 @@ export class LibraryService {
   }
 
   async createRule(policyId: number, data: any) {
-    const [result] = await this.db.execute(
+    const [rows] = await this.db.execute(
       `INSERT INTO library_policy_rules 
        (policy_id, rule_code, rule_name, description, is_active) 
-       VALUES (?, ?, ?, ?, ?)`,
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id`,
       [
         policyId,
         data.rule_code,
@@ -111,36 +112,38 @@ export class LibraryService {
         data.is_active !== false,
       ],
     );
-    return { id: (result as any).insertId, policy_id: policyId, ...data };
+    return { id: (rows as any[])[0].id, policy_id: policyId, ...data };
   }
 
   async updateRule(ruleId: number, data: any) {
     // Build dynamic query based on provided fields
     const updates: string[] = [];
     const values: any[] = [];
+    let paramIndex = 0;
+    const nextParam = () => `$${++paramIndex}`;
 
     if (data.rule_code !== undefined) {
-      updates.push('rule_code = ?');
+      updates.push(`rule_code = ${nextParam()}`);
       values.push(data.rule_code);
     }
     if (data.rule_name !== undefined) {
-      updates.push('rule_name = ?');
+      updates.push(`rule_name = ${nextParam()}`);
       values.push(data.rule_name);
     }
     if (data.description !== undefined) {
-      updates.push('description = ?');
+      updates.push(`description = ${nextParam()}`);
       values.push(data.description || null);
     }
     if (data.is_active !== undefined) {
-      updates.push('is_active = ?');
+      updates.push(`is_active = ${nextParam()}`);
       values.push(data.is_active);
     }
     if (data.conditions !== undefined) {
-      updates.push('conditions = ?');
+      updates.push(`conditions = ${nextParam()}`);
       values.push(data.conditions ? JSON.stringify(data.conditions) : null);
     }
     if (data.calculation_formula !== undefined) {
-      updates.push('calculation_formula = ?');
+      updates.push(`calculation_formula = ${nextParam()}`);
       values.push(data.calculation_formula || null);
     }
 
@@ -153,7 +156,7 @@ export class LibraryService {
 
     values.push(ruleId);
     await this.db.execute(
-      `UPDATE library_policy_rules SET ${updates.join(', ')} WHERE id = ?`,
+      `UPDATE library_policy_rules SET ${updates.join(', ')} WHERE id = $${paramIndex + 1}`,
       values,
     );
     return { id: ruleId, ...data };
@@ -161,7 +164,7 @@ export class LibraryService {
 
   async deleteRule(ruleId: number) {
     await this.db.execute(
-      'DELETE FROM library_policy_rules WHERE id = ?',
+      'DELETE FROM library_policy_rules WHERE id = $1',
       [ruleId],
     );
     return { success: true };
@@ -180,7 +183,7 @@ export class LibraryService {
       const [rules] = await this.db.execute(
         `SELECT id, rule_code, rule_name, description 
          FROM library_policy_rules 
-         WHERE policy_id = ? AND is_active = true 
+         WHERE policy_id = $1 AND is_active = true 
          ORDER BY rule_code`,
         [policy.id],
       );
@@ -203,7 +206,7 @@ export class LibraryService {
       await this.db.execute(
         `INSERT INTO library_policy_rules 
          (policy_id, rule_code, rule_name, description, is_active) 
-         VALUES (?, ?, ?, ?, ?)`,
+         VALUES ($1, $2, $3, $4, $5)`,
         [policyId, rule.code, rule.name, rule.desc, true],
       );
     }

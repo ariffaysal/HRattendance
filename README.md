@@ -11,7 +11,7 @@ attendance/
 │   │   ├── modules/
 │   │   │   ├── attendance/     # Attendance processing module
 │   │   │   └── employees/      # Employee CRUD module
-│   │   ├── database/           # SQL Server connection
+│   │   ├── database/           # PostgreSQL connection
 │   │   └── config/             # Configuration constants
 │   └── package.json
 │
@@ -26,26 +26,42 @@ attendance/
 
 ## Prerequisites
 
-- Node.js 18+ 
-- SQL Server (existing from PHP setup)
+- Node.js 18+
+- Docker Desktop (for PostgreSQL database)
 - npm or yarn
 
 ## Setup Instructions
 
-### 1. Backend Setup
+### 1. Start the PostgreSQL database (Docker Desktop)
+
+```bash
+docker compose up -d
+```
+
+This starts a PostgreSQL 16 container on `localhost:5432` and creates the
+`attendance_db` database with the full schema and seed data on first boot.
+
+- Database: `attendance_db`
+- User / Password: `postgres` / `postgres`
+- To reset the database and re-run the init scripts: `docker compose down -v && docker compose up -d`
+
+### 2. Backend Setup
 
 ```bash
 cd backend
 npm install
 copy .env.example .env
-# Edit .env with your SQL Server credentials
+# Edit .env with your PostgreSQL credentials if you changed them in docker-compose.yml
 npm run start:dev
 ```
 
 Backend will run on http://localhost:3001
 API docs available at http://localhost:3001/api/docs
 
-### 2. Frontend Setup
+> No PostgreSQL available? Set `USE_MOCK_DB=true` in `backend/.env` to run with
+> the in-memory mock database (data is not persisted).
+
+### 3. Frontend Setup
 
 ```bash
 cd frontend
@@ -83,6 +99,10 @@ Frontend will run on http://localhost:3000
 - Date range filtering
 - Print-friendly views
 
-## Migration Notes
+## Database Notes
 
-The database schema remains unchanged - the new system uses the same SQL Server database as the PHP version. Upload the CSV files again or copy the existing `attendance_cache.csv` to the backend directory.
+- The backend uses PostgreSQL (via the `pg` driver).
+- Schema is defined in `backend/database/init-postgres.sql` (auto-run by Docker on first boot).
+- The `logs` (attendance), `employee_addresses`, `employee_education` and `auth_users`
+  tables are also auto-created by the backend on startup if they are missing.
+- Upload the CSV files again or copy the existing `attendance_cache.csv` to the backend directory.

@@ -1,5 +1,6 @@
+-- Employee Salary Information Tables (PostgreSQL)
 CREATE TABLE IF NOT EXISTS employee_salary_information (
-  id INT AUTO_INCREMENT PRIMARY KEY,
+  id SERIAL PRIMARY KEY,
   emp_code VARCHAR(50) NOT NULL,
   emp_id VARCHAR(50) NULL,
   emp_name VARCHAR(100) NULL,
@@ -11,7 +12,7 @@ CREATE TABLE IF NOT EXISTS employee_salary_information (
   section VARCHAR(100) NULL,
   subsection VARCHAR(100) NULL,
   designation VARCHAR(100) NULL,
-  
+
   -- Salary Information Fields
   s_grade VARCHAR(50) NULL,
   st_salary VARCHAR(50) NULL,
@@ -20,15 +21,17 @@ CREATE TABLE IF NOT EXISTS employee_salary_information (
   cash_disbursement VARCHAR(10) DEFAULT 'No',
   policy VARCHAR(100) NULL,
   mode VARCHAR(50) DEFAULT 'Actual',
-  
+
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  INDEX idx_emp_code (emp_code),
-  UNIQUE KEY unique_emp_code (emp_code)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+  CONSTRAINT unique_salary_info_emp_code UNIQUE (emp_code)
+);
+
+CREATE INDEX IF NOT EXISTS idx_employee_salary_information_emp_code ON employee_salary_information (emp_code);
 
 CREATE TABLE IF NOT EXISTS employee_salary_bank_info (
-  id INT AUTO_INCREMENT PRIMARY KEY,
+  id SERIAL PRIMARY KEY,
   emp_code VARCHAR(50) NOT NULL,
   salary_bank VARCHAR(100) NULL,
   branch_name VARCHAR(100) NULL,
@@ -38,13 +41,15 @@ CREATE TABLE IF NOT EXISTS employee_salary_bank_info (
   show_tax VARCHAR(10) DEFAULT 'Yes',
   sequence INT DEFAULT 1,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  INDEX idx_emp_code (emp_code),
-  FOREIGN KEY (emp_code) REFERENCES employee_salary_information(emp_code) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_salary_bank_info_emp_code FOREIGN KEY (emp_code)
+      REFERENCES employee_salary_information (emp_code) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_employee_salary_bank_info_emp_code ON employee_salary_bank_info (emp_code);
 
 CREATE TABLE IF NOT EXISTS employee_salary_breakdown (
-  id INT AUTO_INCREMENT PRIMARY KEY,
+  id SERIAL PRIMARY KEY,
   emp_code VARCHAR(50) NOT NULL,
   payroll_head VARCHAR(100) NOT NULL,
   type VARCHAR(50) NOT NULL,
@@ -53,7 +58,9 @@ CREATE TABLE IF NOT EXISTS employee_salary_breakdown (
   amount VARCHAR(50) NULL,
   sequence INT DEFAULT 1,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  INDEX idx_emp_code (emp_code),
-  FOREIGN KEY (emp_code) REFERENCES employee_salary_information(emp_code) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_salary_breakdown_emp_code FOREIGN KEY (emp_code)
+      REFERENCES employee_salary_information (emp_code) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_employee_salary_breakdown_emp_code ON employee_salary_breakdown (emp_code);

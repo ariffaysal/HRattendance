@@ -1,12 +1,11 @@
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
-import * as mysql from 'mysql2/promise';
-import { SQL_CONNECTION } from '../../database/database.module';
+import { PgConnection, SQL_CONNECTION } from '../../database/database.module';
 import { CreateEmployeeSalaryInformationDto, UpdateEmployeeSalaryInformationDto, BankInfoDto, SalaryBreakdownDto } from './dto/create-employee-salary-information.dto';
 
 @Injectable()
 export class EmployeeSalaryInformationService {
   constructor(
-    @Inject(SQL_CONNECTION) private connection: mysql.Connection,
+    @Inject(SQL_CONNECTION) private connection: PgConnection,
   ) {}
 
   // Transform snake_case DB results to camelCase for API
@@ -75,7 +74,7 @@ export class EmployeeSalaryInformationService {
     const params: any[] = [];
 
     if (search) {
-      query += ' WHERE emp_code LIKE ? OR emp_name LIKE ? OR department LIKE ?';
+      query += ' WHERE emp_code LIKE $1 OR emp_name LIKE $2 OR department LIKE $3';
       const searchTerm = `%${search}%`;
       params.push(searchTerm, searchTerm, searchTerm);
     }
@@ -88,7 +87,7 @@ export class EmployeeSalaryInformationService {
 
   async findOne(id: number): Promise<any> {
     const [rows] = await this.connection.execute(
-      'SELECT * FROM employee_salary_information WHERE id = ?',
+      'SELECT * FROM employee_salary_information WHERE id = $1',
       [id],
     );
     
@@ -106,7 +105,7 @@ export class EmployeeSalaryInformationService {
 
   async findByEmpCode(empCode: string): Promise<any> {
     const [rows] = await this.connection.execute(
-      'SELECT * FROM employee_salary_information WHERE emp_code = ?',
+      'SELECT * FROM employee_salary_information WHERE emp_code = $1',
       [empCode],
     );
     
@@ -124,7 +123,7 @@ export class EmployeeSalaryInformationService {
 
   async findBankInfosByEmpCode(empCode: string): Promise<any[]> {
     const [rows] = await this.connection.execute(
-      'SELECT * FROM employee_salary_bank_info WHERE emp_code = ? ORDER BY sequence ASC',
+      'SELECT * FROM employee_salary_bank_info WHERE emp_code = $1 ORDER BY sequence ASC',
       [empCode],
     );
     
@@ -133,7 +132,7 @@ export class EmployeeSalaryInformationService {
 
   async findSalaryBreakdownByEmpCode(empCode: string): Promise<any[]> {
     const [rows] = await this.connection.execute(
-      'SELECT * FROM employee_salary_breakdown WHERE emp_code = ? ORDER BY sequence ASC',
+      'SELECT * FROM employee_salary_breakdown WHERE emp_code = $1 ORDER BY sequence ASC',
       [empCode],
     );
     
@@ -147,7 +146,8 @@ export class EmployeeSalaryInformationService {
         emp_code, emp_id, emp_name, category, company, location, division, department, 
         section, subsection, designation, s_grade, st_salary, gross_salary, b_gross,
         cash_disbursement, policy, mode
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+      RETURNING id
     `;
 
     const values = [
@@ -171,8 +171,8 @@ export class EmployeeSalaryInformationService {
       dto.mode || 'Actual',
     ];
 
-    const [result] = await this.connection.execute(sql, values);
-    const insertId = (result as mysql.OkPacket).insertId;
+    const [rows] = await this.connection.execute(sql, values);
+    const insertId = (rows as any[])[0].id;
 
     // Insert bank information if provided
     if (dto.bankInfos && dto.bankInfos.length > 0) {
@@ -192,7 +192,7 @@ export class EmployeeSalaryInformationService {
       INSERT INTO employee_salary_bank_info (
         emp_code, salary_bank, branch_name, account_no, salary_amount, 
         salary_period, show_tax, sequence
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
     `;
 
     for (const bank of bankInfos) {
@@ -214,7 +214,7 @@ export class EmployeeSalaryInformationService {
     const sql = `
       INSERT INTO employee_salary_breakdown (
         emp_code, payroll_head, type, percentage_formula, base_head, amount, sequence
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7)
     `;
 
     for (const item of salaryBreakdown) {
@@ -236,25 +236,25 @@ export class EmployeeSalaryInformationService {
     
     const sql = `
       UPDATE employee_salary_information SET
-        emp_code = ?,
-        emp_id = ?,
-        emp_name = ?,
-        category = ?,
-        company = ?,
-        location = ?,
-        division = ?,
-        department = ?,
-        section = ?,
-        subsection = ?,
-        designation = ?,
-        s_grade = ?,
-        st_salary = ?,
-        gross_salary = ?,
-        b_gross = ?,
-        cash_disbursement = ?,
-        policy = ?,
-        mode = ?
-      WHERE id = ?
+        emp_code = $1,
+        emp_id = $2,
+        emp_name = $3,
+        category = $4,
+        company = $5,
+        location = $6,
+        division = $7,
+        department = $8,
+        section = $9,
+        subsection = $10,
+        designation = $11,
+        s_grade = $12,
+        st_salary = $13,
+        gross_salary = $14,
+        b_gross = $15,
+        cash_disbursement = $16,
+        policy = $17,
+        mode = $18
+      WHERE id = $19
     `;
 
     const values = [
@@ -285,7 +285,7 @@ export class EmployeeSalaryInformationService {
     if (dto.bankInfos && dto.bankInfos.length > 0) {
       // Delete existing bank infos and recreate
       await this.connection.execute(
-        'DELETE FROM employee_salary_bank_info WHERE emp_code = ?',
+        'DELETE FROM employee_salary_bank_info WHERE emp_code = $1',
         [dto.empCode || existing.empCode],
       );
       await this.createBankInfos(dto.empCode || existing.empCode, dto.bankInfos);
@@ -295,7 +295,7 @@ export class EmployeeSalaryInformationService {
     if (dto.salaryBreakdown && dto.salaryBreakdown.length > 0) {
       // Delete existing salary breakdown and recreate
       await this.connection.execute(
-        'DELETE FROM employee_salary_breakdown WHERE emp_code = ?',
+        'DELETE FROM employee_salary_breakdown WHERE emp_code = $1',
         [dto.empCode || existing.empCode],
       );
       await this.createSalaryBreakdowns(dto.empCode || existing.empCode, dto.salaryBreakdown);
@@ -309,19 +309,19 @@ export class EmployeeSalaryInformationService {
     
     // Delete salary breakdown first (cascade should handle this, but just to be safe)
     await this.connection.execute(
-      'DELETE FROM employee_salary_breakdown WHERE emp_code = ?',
+      'DELETE FROM employee_salary_breakdown WHERE emp_code = $1',
       [existing.empCode],
     );
     
     // Delete bank infos first (cascade should handle this, but just to be safe)
     await this.connection.execute(
-      'DELETE FROM employee_salary_bank_info WHERE emp_code = ?',
+      'DELETE FROM employee_salary_bank_info WHERE emp_code = $1',
       [existing.empCode],
     );
     
     // Delete main record
     await this.connection.execute(
-      'DELETE FROM employee_salary_information WHERE id = ?',
+      'DELETE FROM employee_salary_information WHERE id = $1',
       [id],
     );
   }
