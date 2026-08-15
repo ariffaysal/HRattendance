@@ -3,6 +3,7 @@ import * as crypto from 'crypto';
 import * as bcrypt from 'bcryptjs';
 import { JwtService } from '@nestjs/jwt';
 import { PgConnection, SQL_CONNECTION } from '../../database/database.module';
+import { AuditService } from '../audit/audit.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 
@@ -12,6 +13,7 @@ export class AuthService {
     @Inject(SQL_CONNECTION)
     private connection: PgConnection,
     private readonly jwtService: JwtService,
+    private readonly auditService: AuditService,
   ) {}
 
   // Legacy SHA-256 hashing used before the bcrypt migration - kept only to
@@ -52,6 +54,13 @@ export class AuthService {
       [employeeId, email, mobileNumber, passwordHash],
     );
 
+    await this.auditService.log({
+      action: 'register',
+      entity: 'auth',
+      entityId: employeeId,
+      details: { email },
+    });
+
     return {
       success: true,
       message: 'Account created successfully',
@@ -70,10 +79,22 @@ export class AuthService {
     const user = (users as any[])[0];
 
     if (!user) {
+      await this.auditService.log({
+        action: 'login_failed',
+        entity: 'auth',
+        entityId: employeeId,
+        details: { reason: 'unknown_employee' },
+      });
       throw new UnauthorizedException('Invalid employee ID or password');
     }
 
     if (!user.is_active) {
+      await this.auditService.log({
+        action: 'login_failed',
+        entity: 'auth',
+        entityId: employeeId,
+        details: { reason: 'inactive_account' },
+      });
       throw new UnauthorizedException('Account is inactive');
     }
 
@@ -89,6 +110,12 @@ export class AuthService {
           [upgradedHash, user.id],
         );
       } else {
+        await this.auditService.log({
+          action: 'login_failed',
+          entity: 'auth',
+          entityId: employeeId,
+          details: { reason: 'wrong_password' },
+        });
         throw new UnauthorizedException('Invalid employee ID or password');
       }
     }
@@ -102,6 +129,14 @@ export class AuthService {
     // Sign a JWT access token
     const payload = { sub: user.id, employeeId: user.employee_id, email: user.email };
     const accessToken = await this.jwtService.signAsync(payload);
+
+    await this.auditService.log({
+      action: 'login',
+      entity: 'auth',
+      entityId: user.employee_id,
+      actorId: user.id,
+      actorEmployeeId: user.employee_id,
+    });
 
     return {
       success: true,

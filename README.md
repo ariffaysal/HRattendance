@@ -88,6 +88,47 @@ Frontend will run on http://localhost:3000
 - `PUT /employees/:id` - Update employee
 - `DELETE /employees/:id` - Delete employee
 
+### Health / Auth
+- `GET /health` - Liveness/DB check (public, throttled)
+- `POST /auth/register` - Create an account (public, rate-limited)
+- `POST /auth/login` - Login, returns a JWT (public, rate-limited)
+
+## Security
+
+- **Authentication**: every endpoint except `@Public()` routes requires a valid
+  JWT (`Authorization: Bearer <token>`), enforced by a global guard.
+- **Passwords**: bcrypt (salted). Legacy unsalted SHA-256 hashes are detected on
+  login and transparently upgraded to bcrypt.
+- **Rate limiting**: global 60 req/min; auth endpoints limited to 5 req/min.
+- **Headers**: `helmet` is enabled (CSP, HSTS, nosniff, frame protection).
+- **Error responses**: a global exception filter returns a consistent shape and
+  never leaks stack traces in production.
+- **API docs** (`/api/docs`): development only - disabled when `NODE_ENV=production`
+  or `SWAGGER_ENABLED=false`.
+- **Production startup**: the server refuses to start if `JWT_SECRET` is unset or
+  still the development default. Generate one with `openssl rand -hex 32`.
+- **Uploaded attendance files** are written to `uploads/temp`, are never served
+  statically, and stale files are cleaned on startup.
+
+## Audit trail
+
+Every mutating API request (create/update/delete on any module) is written to
+the append-only `audit_logs` table with the authenticated actor, target entity,
+sanitized request body, and IP. Auth events (register, login, failed login) are
+recorded explicitly. Audit writes never fail the request they record, and
+password-like fields are stripped before storage.
+
+## Tests
+
+```bash
+cd backend
+npm test
+```
+
+Covers authentication (login, legacy hash migration, registration), the
+JWT guard (public bypass, missing/invalid tokens), and the audit trail
+(entry shape, secret stripping, failure paths).
+
 ## Features Preserved
 
 - CSV upload with delimiter detection

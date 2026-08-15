@@ -1,4 +1,4 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -18,14 +18,21 @@ import {
 import { SearchAttendanceDto } from './dto/search-attendance.dto';
 
 @Injectable()
-export class AttendanceService {
+export class AttendanceService implements OnModuleInit {
   private readonly cachePath: string;
+  private readonly tempDir: string;
 
   constructor(
     @Inject(SQL_CONNECTION) private readonly db: PgConnection,
     private readonly configService: ConfigService,
   ) {
     this.cachePath = path.join(process.cwd(), CACHE_FILENAME);
+    this.tempDir = path.join(process.cwd(), 'uploads', 'temp');
+  }
+
+  async onModuleInit(): Promise<void> {
+    // Remove temp uploads left behind by failed or interrupted uploads.
+    this.cleanupTempFiles();
   }
 
   hasCache(): boolean {
@@ -33,6 +40,7 @@ export class AttendanceService {
   }
 
   async processUpload(file: Express.Multer.File): Promise<{ success: boolean; message: string; records: number }> {
+    this.cleanupTempFiles();
     await this.clearData();
 
     const delimiter = this.detectDelimiter(file.path);
@@ -185,6 +193,28 @@ export class AttendanceService {
 
       return { ...segment, employees };
     });
+  }
+
+  // Remove stale attendance uploads (older than 24h) that were never deleted.
+  private cleanupTempFiles(): void {
+    const MAX_AGE_MS = 24 * 60 * 60 * 1000;
+    try {
+      if (!fs.existsSync(this.tempDir)) return;
+      const now = Date.now();
+      for (const file of fs.readdirSync(this.tempDir)) {
+        const filePath = path.join(this.tempDir, file);
+        try {
+          const stat = fs.statSync(filePath);
+          if (stat.isFile() && now - stat.mtimeMs > MAX_AGE_MS) {
+            fs.unlinkSync(filePath);
+          }
+        } catch {
+          // Ignore individual file errors (e.g. file already removed).
+        }
+      }
+    } catch (err) {
+      console.error('Failed to clean stale temp uploads:', (err as Error).message);
+    }
   }
 
   private detectDelimiter(filePath: string): string {

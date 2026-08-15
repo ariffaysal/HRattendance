@@ -320,6 +320,28 @@ const SET_UPDATED_AT_TRIGGER = `
           `);
           console.log('Auth users table ready');
 
+          // Append-only audit trail - every mutation and sensitive event is recorded.
+          await client.query(`
+            CREATE TABLE IF NOT EXISTS audit_logs (
+              id SERIAL PRIMARY KEY,
+              actor_id INTEGER,
+              actor_employee_id VARCHAR(50),
+              action VARCHAR(50) NOT NULL,
+              entity VARCHAR(100) NOT NULL,
+              entity_id VARCHAR(100),
+              details JSONB,
+              ip VARCHAR(45),
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+          `);
+          await client.query(`
+            CREATE INDEX IF NOT EXISTS idx_audit_logs_entity ON audit_logs (entity, entity_id)
+          `);
+          await client.query(`
+            CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs (created_at)
+          `);
+          console.log('Audit logs table ready');
+
           // Replicate MySQL's ON UPDATE CURRENT_TIMESTAMP for the tables created here.
           await client.query(SET_UPDATED_AT_TRIGGER);
           await client.query(`

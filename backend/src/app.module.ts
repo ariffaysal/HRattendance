@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
-import { ServeStaticModule } from '@nestjs/serve-static';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
-import { join } from 'path';
 import { DatabaseModule } from './database/database.module';
+import { AuditModule } from './modules/audit/audit.module';
+import { AuditInterceptor } from './modules/audit/audit.interceptor';
 import { AttendanceModule } from './modules/attendance/attendance.module';
 import { EmployeesModule } from './modules/employees/employees.module';
 import { EmployeeAddressesModule } from './modules/employee-addresses/employee-addresses.module';
@@ -13,6 +13,7 @@ import { EmployeePolicyTaggingModule } from './modules/employee-policy-tagging/e
 import { EmployeeSalaryInformationModule } from './modules/employee-salary-information/employee-salary-information.module';
 import { LibraryModule } from './modules/library/library.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { HealthModule } from './modules/health/health.module';
 
 @Module({
   imports: [
@@ -21,10 +22,6 @@ import { AuthModule } from './modules/auth/auth.module';
       envFilePath: '.env',
     }),
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 60 }]),
-    ServeStaticModule.forRoot({
-      rootPath: join(__dirname, '..', 'uploads'),
-      serveRoot: '/uploads',
-    }),
     DatabaseModule,
     AttendanceModule,
     EmployeesModule,
@@ -34,11 +31,17 @@ import { AuthModule } from './modules/auth/auth.module';
     EmployeeSalaryInformationModule,
     LibraryModule,
     AuthModule,
+    HealthModule,
+    AuditModule,
   ],
   providers: [
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: AuditInterceptor,
     },
   ],
 })
