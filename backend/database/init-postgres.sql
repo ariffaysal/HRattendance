@@ -320,6 +320,11 @@ CREATE INDEX IF NOT EXISTS idx_employee_salary_breakdown_emp_code ON employee_sa
 
 -- ----------------------------------------------------------------------------
 -- auth_users
+--
+-- Self-registration is DISABLED - accounts are created only by an admin
+-- (roles: admin | hr | employee). A default admin is seeded below so the
+-- system is usable on first boot: employee_id 'admin' / password 'Admin@123'.
+-- Change that password immediately after the first login.
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS auth_users (
     id SERIAL PRIMARY KEY,
@@ -327,6 +332,7 @@ CREATE TABLE IF NOT EXISTS auth_users (
     email VARCHAR(100) NOT NULL UNIQUE,
     mobile_number VARCHAR(20) NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
+    role VARCHAR(20) NOT NULL DEFAULT 'employee',
     is_active SMALLINT DEFAULT 1,
     last_login TIMESTAMP NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -335,6 +341,12 @@ CREATE TABLE IF NOT EXISTS auth_users (
 
 CREATE INDEX IF NOT EXISTS idx_auth_users_employee_id ON auth_users (employee_id);
 CREATE INDEX IF NOT EXISTS idx_auth_users_email ON auth_users (email);
+CREATE INDEX IF NOT EXISTS idx_auth_users_role ON auth_users (role);
+
+-- Default admin account (bcrypt hash of 'Admin@123').
+INSERT INTO auth_users (employee_id, email, mobile_number, password_hash, role)
+VALUES ('admin', 'admin@example.com', '0000000000', '$2a$10$DYs0TAvlpziHBgPhCRK/c.QCRuTmfXu28uKrO0GKYP6Ny8M3xD6SO', 'admin')
+ON CONFLICT (employee_id) DO NOTHING;
 
 -- ----------------------------------------------------------------------------
 -- library_policies + library_policy_rules

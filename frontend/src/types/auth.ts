@@ -3,18 +3,14 @@ export interface LoginData {
   password: string;
 }
 
-export interface RegisterData {
-  employeeId: string;
-  email: string;
-  mobileNumber: string;
-  password: string;
-}
+export type UserRole = 'admin' | 'hr' | 'employee';
 
 export interface User {
   id: number;
   employeeId: string;
   email: string;
   mobileNumber: string;
+  role: UserRole;
 }
 
 export interface AuthResponse {

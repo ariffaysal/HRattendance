@@ -294,7 +294,7 @@ function PricingCard({
         ))}
       </ul>
       <Link
-        href="/register"
+        href="/login"
         className={`block w-full py-3 rounded-xl font-semibold text-center transition-all duration-300 ${
           isPopular
             ? 'bg-gradient-to-r from-neon-blue to-neon-purple text-white hover:shadow-lg hover:shadow-neon-blue/30'
@@ -407,7 +407,7 @@ export default function SkyviewLanding() {
                 Sign In
               </Link>
               <Link
-                href="/register"
+                href="/login"
                 className="px-4 py-2 bg-gradient-to-r from-neon-blue to-neon-purple rounded-lg text-sm font-semibold hover:shadow-lg hover:shadow-neon-blue/30 transition-all"
               >
                 Get Started
@@ -437,6 +437,20 @@ export default function SkyviewLanding() {
                 <Link href="#pricing" className="block py-2 text-slate-400 hover:text-white">Pricing</Link>
                 <Link href="#network" className="block py-2 text-slate-400 hover:text-white">Network</Link>
                 <Link href="#contact" className="block py-2 text-slate-400 hover:text-white">Contact</Link>
+                <div className="pt-3 mt-3 border-t border-white/10 space-y-3">
+                  <Link
+                    href="/login"
+                    className="block py-2 text-slate-300 hover:text-white"
+                  >
+                    Sign In
+                  </Link>
+                  <Link
+                    href="/login"
+                    className="block py-2.5 px-4 bg-gradient-to-r from-neon-blue to-neon-purple rounded-lg text-center font-semibold hover:shadow-lg hover:shadow-neon-blue/30 transition-all"
+                  >
+                    Get Started
+                  </Link>
+                </div>
               </div>
             </motion.div>
           )}
@@ -503,7 +517,7 @@ export default function SkyviewLanding() {
             className="flex flex-col sm:flex-row items-center justify-center gap-4"
           >
             <Link
-              href="/register"
+              href="/login"
               className="group px-8 py-4 bg-gradient-to-r from-neon-blue to-neon-purple rounded-xl font-semibold text-lg hover:shadow-lg hover:shadow-neon-blue/30 transition-all flex items-center gap-2 animate-pulse-neon"
             >
               Get Started

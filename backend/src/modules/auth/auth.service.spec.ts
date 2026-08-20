@@ -1,6 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
-import { ConflictException, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, UnauthorizedException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import { AuthService } from './auth.service';
@@ -31,7 +31,7 @@ describe('AuthService', () => {
   });
 
   describe('login', () => {
-    it('returns a JWT and user details for valid credentials', async () => {
+    it('returns a JWT and user details (with role) for valid credentials', async () => {
       const passwordHash = await bcrypt.hash('correct-password', BCRYPT_ROUNDS);
       const user = {
         id: 1,
@@ -39,6 +39,7 @@ describe('AuthService', () => {
         email: 'emp@example.com',
         mobile_number: '1234567890',
         password_hash: passwordHash,
+        role: 'employee',
         is_active: 1,
       };
       db.execute
@@ -54,9 +55,10 @@ describe('AuthService', () => {
         employeeId: 'EMP001',
         email: 'emp@example.com',
         mobileNumber: '1234567890',
+        role: 'employee',
       });
       expect(jwtService.signAsync).toHaveBeenCalledWith(
-        expect.objectContaining({ sub: 1, employeeId: 'EMP001' }),
+        expect.objectContaining({ sub: 1, employeeId: 'EMP001', role: 'employee' }),
       );
     });
 
@@ -75,6 +77,7 @@ describe('AuthService', () => {
         email: 'emp@example.com',
         mobile_number: '1234567890',
         password_hash: passwordHash,
+        role: 'employee',
         is_active: 0,
       };
       db.execute.mockResolvedValueOnce([[user], { rowCount: 1 }]);
@@ -91,6 +94,7 @@ describe('AuthService', () => {
         email: 'emp@example.com',
         mobile_number: '1234567890',
         password_hash: passwordHash,
+        role: 'employee',
         is_active: 1,
       };
       db.execute.mockResolvedValueOnce([[user], { rowCount: 1 }]);
@@ -107,6 +111,7 @@ describe('AuthService', () => {
         email: 'legacy@example.com',
         mobile_number: '1234567890',
         password_hash: legacyHash,
+        role: 'employee',
         is_active: 1,
       };
       db.execute
@@ -125,17 +130,18 @@ describe('AuthService', () => {
     });
   });
 
-  describe('register', () => {
+  describe('createUser (admin only)', () => {
     it('rejects a duplicate employee ID', async () => {
       db.execute
         .mockResolvedValueOnce([[{ id: 1 }], { rowCount: 1 }]) // existing employee_id
         .mockResolvedValueOnce([[], { rowCount: 0 }]);
       await expect(
-        authService.register({
+        authService.createUser({
           employeeId: 'EMP001',
           email: 'new@example.com',
           mobileNumber: '1234567890',
           password: 'StrongPass1!',
+          role: 'employee',
         }),
       ).rejects.toThrow(ConflictException);
     });
@@ -145,46 +151,137 @@ describe('AuthService', () => {
         .mockResolvedValueOnce([[], { rowCount: 0 }]) // employee_id free
         .mockResolvedValueOnce([[{ id: 2 }], { rowCount: 1 }]); // email taken
       await expect(
-        authService.register({
-          employeeId: 'EMP001',
+        authService.createUser({
+          employeeId: 'EMP003',
           email: 'taken@example.com',
           mobileNumber: '1234567890',
           password: 'StrongPass1!',
+          role: 'hr',
         }),
       ).rejects.toThrow(ConflictException);
     });
 
-    it('stores a bcrypt hash (never plaintext or SHA-256)', async () => {
+    it('stores a bcrypt hash and the requested role (never plaintext or SHA-256)', async () => {
       db.execute
         .mockResolvedValueOnce([[], { rowCount: 0 }]) // employee_id free
         .mockResolvedValueOnce([[], { rowCount: 0 }]) // email free
         .mockResolvedValueOnce([[], { rowCount: 1 }]); // INSERT
 
-      const result = await authService.register({
+      const result = await authService.createUser({
         employeeId: 'EMP003',
         email: 'new@example.com',
         mobileNumber: '1234567890',
         password: 'StrongPass1!',
+        role: 'admin',
       });
 
       expect(result.success).toBe(true);
       const insertCall = db.execute.mock.calls.find(([sql]) => sql.includes('INSERT INTO auth_users'));
       expect(insertCall).toBeDefined();
-      const [employeeId, , , storedHash] = insertCall[1];
+      const [employeeId, , , storedHash, storedRole] = insertCall[1];
       expect(employeeId).toBe('EMP003');
+      expect(storedRole).toBe('admin');
       expect(storedHash.startsWith('$2')).toBe(true);
       expect(storedHash).not.toContain('StrongPass1!');
       await expect(bcrypt.compare('StrongPass1!', storedHash)).resolves.toBe(true);
     });
   });
 
+  describe('getUsers (admin only)', () => {
+    it('returns accounts without password hashes', async () => {
+      db.execute.mockResolvedValueOnce([
+        [
+          { id: 1, employee_id: 'admin', email: 'admin@example.com', mobile_number: '0000000000', role: 'admin', is_active: 1, last_login: null, created_at: new Date() },
+          { id: 2, employee_id: 'EMP001', email: 'emp@example.com', mobile_number: '1234567890', role: 'employee', is_active: 1, last_login: null, created_at: new Date() },
+        ],
+        { rowCount: 2 },
+      ]);
+
+      const users = await authService.getUsers();
+
+      expect(users).toHaveLength(2);
+      expect(users[0]).toEqual({
+        id: 1,
+        employeeId: 'admin',
+        email: 'admin@example.com',
+        mobileNumber: '0000000000',
+        role: 'admin',
+        isActive: true,
+        lastLogin: null,
+        createdAt: expect.any(Date),
+      });
+      // The raw SQL must never select the hash
+      expect(db.execute.mock.calls[0][0]).not.toContain('password_hash');
+    });
+  });
+
+  describe('updateUser (admin only)', () => {
+    it('throws when the target user does not exist', async () => {
+      db.execute.mockResolvedValueOnce([[], { rowCount: 0 }]);
+      await expect(
+        authService.updateUser(999, { role: 'hr' }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('refuses to demote the last active admin', async () => {
+      const admin = { id: 1, employee_id: 'admin', email: 'a@example.com', mobile_number: '0', role: 'admin', is_active: 1, last_login: null, created_at: new Date() };
+      db.execute
+        .mockResolvedValueOnce([[admin], { rowCount: 1 }]) // SELECT target
+        .mockResolvedValueOnce([[admin], { rowCount: 1 }]); // SELECT admins -> only 1
+      await expect(
+        authService.updateUser(1, { role: 'hr' }),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('updates role and active status', async () => {
+      const user = { id: 2, employee_id: 'EMP002', email: 'e@example.com', mobile_number: '1', role: 'employee', is_active: 1, last_login: null, created_at: new Date() };
+      db.execute
+        .mockResolvedValueOnce([[user], { rowCount: 1 }]) // SELECT target
+        .mockResolvedValueOnce([[], { rowCount: 1 }]); // UPDATE
+
+      const result = await authService.updateUser(2, { role: 'hr', isActive: true });
+
+      expect(result.success).toBe(true);
+      const updateCall = db.execute.mock.calls.find(([sql]) => sql.includes('UPDATE auth_users'));
+      expect(updateCall).toBeDefined();
+      expect(updateCall[1]).toEqual(['hr', 1, 2]);
+    });
+  });
+
+  describe('resetPassword (admin only)', () => {
+    it('throws when the target user does not exist', async () => {
+      db.execute.mockResolvedValueOnce([[], { rowCount: 0 }]);
+      await expect(
+        authService.resetPassword(999, { newPassword: 'NewPass1!' }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('stores a fresh bcrypt hash', async () => {
+      const user = { id: 2, employee_id: 'EMP002', email: 'e@example.com', mobile_number: '1', role: 'employee', is_active: 1, last_login: null, created_at: new Date() };
+      db.execute
+        .mockResolvedValueOnce([[user], { rowCount: 1 }]) // SELECT target
+        .mockResolvedValueOnce([[], { rowCount: 1 }]); // UPDATE
+
+      const result = await authService.resetPassword(2, { newPassword: 'NewPass1!' });
+
+      expect(result.success).toBe(true);
+      const updateCall = db.execute.mock.calls.find(([sql]) => sql.includes('UPDATE auth_users SET password_hash'));
+      expect(updateCall).toBeDefined();
+      const storedHash = updateCall[1][0] as string;
+      expect(storedHash.startsWith('$2')).toBe(true);
+      expect(storedHash).not.toContain('NewPass1!');
+      await expect(bcrypt.compare('NewPass1!', storedHash)).resolves.toBe(true);
+    });
+  });
+
   describe('validateUser', () => {
-    it('returns the user for an active account', async () => {
+    it('returns the user (with role) for an active account', async () => {
       const user = {
         id: 1,
         employee_id: 'EMP001',
         email: 'emp@example.com',
         mobile_number: '1234567890',
+        role: 'employee',
         is_active: 1,
       };
       db.execute.mockResolvedValueOnce([[user], { rowCount: 1 }]);
@@ -193,6 +290,7 @@ describe('AuthService', () => {
         employeeId: 'EMP001',
         email: 'emp@example.com',
         mobileNumber: '1234567890',
+        role: 'employee',
       });
     });
 
@@ -200,7 +298,7 @@ describe('AuthService', () => {
       db.execute.mockResolvedValueOnce([[], { rowCount: 0 }]);
       await expect(authService.validateUser('GHOST')).resolves.toBeNull();
 
-      db.execute.mockResolvedValueOnce([[{ ...{ is_active: 0 } }], { rowCount: 1 }]);
+      db.execute.mockResolvedValueOnce([[{ ...{ is_active: 0, role: 'employee' } }], { rowCount: 1 }]);
       await expect(authService.validateUser('EMP001')).resolves.toBeNull();
     });
   });

@@ -45,10 +45,21 @@ const navItems: NavItem[] = [
   },
 ];
 
+// Only shown to admins - creating/managing login accounts.
+const adminNavItems: NavItem[] = [
+  {
+    label: 'Admin',
+    icon: 'fa-shield-alt',
+    children: [{ href: '/users', label: 'User Management', icon: 'fa-user-cog' }],
+  },
+];
+
 export function Sidebar() {
   const pathname = usePathname();
   const [expandedMenu, setExpandedMenu] = useState<string | null>(null);
   const { user, logout } = useAuth();
+
+  const items = user?.role === 'admin' ? [...navItems, ...adminNavItems] : navItems;
 
   const toggleMenu = (label: string) => {
     setExpandedMenu(expandedMenu === label ? null : label);
@@ -80,7 +91,7 @@ export function Sidebar() {
         </Link>
       </div>
       <div className="sidebar-nav">
-        {navItems.map((item) => (
+        {items.map((item) => (
           <div key={item.label}>
             {item.children ? (
               <>
@@ -125,7 +136,7 @@ export function Sidebar() {
               <span className="fw-semibold">{user.employeeId}</span>
             </div>
             <div className="text-slate-400 text-xs mb-3">
-              {user.email}
+              {user.email} · <span className="text-uppercase">{user.role}</span>
             </div>
           </div>
         )}

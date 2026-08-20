@@ -1,7 +1,8 @@
-import { IsEmail, IsString, MinLength, MaxLength, IsNotEmpty } from 'class-validator';
+import { IsEmail, IsString, MinLength, MaxLength, IsNotEmpty, IsIn } from 'class-validator';
 import { IsStrongPassword } from '../../../common/validators/is-strong-password.validator';
+import { UserRoleValue } from '../decorators/roles.decorator';
 
-export class RegisterDto {
+export class CreateUserDto {
   @IsString()
   @IsNotEmpty()
   @MinLength(3)
@@ -24,4 +25,8 @@ export class RegisterDto {
   @MaxLength(100)
   @IsStrongPassword()
   password: string;
+
+  @IsIn(['employee', 'hr', 'admin'])
+  @IsNotEmpty()
+  role: UserRoleValue;
 }

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Client } from 'pg';
+import * as bcrypt from 'bcryptjs';
 
 export const SQL_CONNECTION = 'SQL_CONNECTION';
 
@@ -34,8 +35,21 @@ class MockConnection {
   ];
   private nextId = 3;
   private logs: any[] = []; // Mock attendance logs table
-  private authUsers: any[] = []; // Mock auth_users table
-  private nextAuthId = 1;
+  // Mock auth_users table - seeded with a default admin so the app is usable
+  // without PostgreSQL. Password is 'Admin@123'.
+  private authUsers: any[] = [
+    {
+      id: 1,
+      employee_id: 'admin',
+      email: 'admin@example.com',
+      mobile_number: '0000000000',
+      password_hash: '$2a$10$DYs0TAvlpziHBgPhCRK/c.QCRuTmfXu28uKrO0GKYP6Ny8M3xD6SO',
+      role: 'admin',
+      is_active: 1,
+      created_at: new Date(),
+    },
+  ];
+  private nextAuthId = 2;
 
   async execute(sql: string, values?: any[]): Promise<[any[], any]> {
     console.log('[MOCK] Execute:', sql.substring(0, 50) + '...');
@@ -116,15 +130,23 @@ class MockConnection {
       }), emptyResult];
     }
 
-    // Handle auth_users table (register/login)
+    // Handle auth_users table (admin-managed accounts + login)
     if (sql.includes('SELECT') && sql.includes('auth_users')) {
-      const employeeId = values?.[0];
-      const user = this.authUsers.find(u => u.employee_id === employeeId);
+      // Parameterless queries: either list everything or filter by role/is_active
+      if (!values || values.length === 0) {
+        if (sql.includes("WHERE role = 'admin'") && sql.includes('is_active = 1')) {
+          return [this.authUsers.filter(u => u.role === 'admin' && u.is_active === 1), emptyResult];
+        }
+        return [this.authUsers, emptyResult];
+      }
+      const user = sql.includes('WHERE id')
+        ? this.authUsers.find(u => u.id === values[0])
+        : this.authUsers.find(u => u.employee_id === values[0]);
       return [user ? [user] : [], emptyResult];
     }
     if (sql.includes('INSERT') && sql.includes('auth_users')) {
-      const user: any = { id: this.nextAuthId++, is_active: 1, created_at: new Date() };
-      const fields = ['employee_id', 'email', 'mobile_number', 'password_hash'];
+      const user: any = { id: this.nextAuthId++, is_active: 1, role: 'employee', created_at: new Date() };
+      const fields = ['employee_id', 'email', 'mobile_number', 'password_hash', 'role'];
       fields.forEach((field, index) => {
         if (values?.[index] !== undefined) {
           user[field] = values[index];
@@ -138,6 +160,8 @@ class MockConnection {
       const user = this.authUsers.find(u => u.id === id);
       if (user) {
         if (sql.includes('password_hash')) user.password_hash = values?.[0];
+        if (sql.includes('role')) user.role = values?.[0];
+        if (sql.includes('is_active')) user.is_active = values?.[1] ?? values?.[0];
         if (sql.includes('last_login')) user.last_login = new Date();
       }
       return [[], { rowCount: user ? 1 : 0 }];
@@ -312,13 +336,33 @@ const SET_UPDATED_AT_TRIGGER = `
               email VARCHAR(100) NOT NULL UNIQUE,
               mobile_number VARCHAR(20) NOT NULL,
               password_hash VARCHAR(255) NOT NULL,
+              role VARCHAR(20) NOT NULL DEFAULT 'employee',
               is_active SMALLINT DEFAULT 1,
               last_login TIMESTAMP NULL,
               created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
               updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
           `);
+          // Existing databases created before roles existed: add the column.
+          await client.query(`
+            ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'employee'
+          `);
           console.log('Auth users table ready');
+
+          // Seed a default admin so the system is usable immediately (registration is disabled).
+          // Credentials: employee_id 'admin' / DEFAULT_ADMIN_PASSWORD (default 'Admin@123').
+          const adminResult = await client.query(`SELECT id FROM auth_users WHERE role = 'admin' LIMIT 1`);
+          if (adminResult.rows.length === 0) {
+            const adminPassword = configService.get<string>('DEFAULT_ADMIN_PASSWORD') || 'Admin@123';
+            const adminHash = await bcrypt.hash(adminPassword, 10);
+            await client.query(
+              `INSERT INTO auth_users (employee_id, email, mobile_number, password_hash, role)
+               VALUES ('admin', 'admin@example.com', '0000000000', $1, 'admin')
+               ON CONFLICT (employee_id) DO NOTHING`,
+              [adminHash],
+            );
+            console.warn(`[BOOTSTRAP] Created default admin account - employee_id: 'admin', password: '${adminPassword}'. CHANGE THIS PASSWORD AFTER FIRST LOGIN.`);
+          }
 
           // Append-only audit trail - every mutation and sensitive event is recorded.
           await client.query(`

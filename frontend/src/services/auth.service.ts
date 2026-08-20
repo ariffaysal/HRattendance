@@ -5,18 +5,14 @@ export interface LoginData {
   password: string;
 }
 
-export interface RegisterData {
-  employeeId: string;
-  email: string;
-  mobileNumber: string;
-  password: string;
-}
+export type UserRole = 'admin' | 'hr' | 'employee';
 
 export interface User {
   id: number;
   employeeId: string;
   email: string;
   mobileNumber: string;
+  role: UserRole;
 }
 
 export interface AuthResponse {
@@ -59,15 +55,25 @@ export const authService = {
     return response.data;
   },
 
-  async register(data: RegisterData): Promise<AuthResponse> {
-    const response = await api.post('/auth/register', data);
-    return response.data;
-  },
-
   logout(): void {
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(TOKEN_KEY);
     removeCookie(COOKIE_KEY);
+  },
+
+  /** Persist a (fresh) user object, e.g. after re-validating the session. */
+  saveUser(user: User): void {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+  },
+
+  /**
+   * Ask the backend whether the stored JWT is still valid and get the fresh
+   * user record. Throws on 401 (stale/deleted/deactivated account) or network
+   * errors (backend down).
+   */
+  async getMe(): Promise<User> {
+    const response = await api.get('/auth/me');
+    return response.data.user as User;
   },
 
   getToken(): string | null {

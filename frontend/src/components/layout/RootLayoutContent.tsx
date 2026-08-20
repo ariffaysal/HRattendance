@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation';
 import { Sidebar } from './Sidebar';
 
 // Routes that should not show the sidebar
-const noSidebarRoutes = ['/skyview', '/login', '/register'];
+const noSidebarRoutes = ['/skyview', '/login'];
 
 export function RootLayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

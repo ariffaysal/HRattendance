@@ -7,8 +7,8 @@ interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isAdmin: boolean;
   login: (employeeId: string, password: string) => Promise<{ success: boolean; message: string }>;
-  register: (employeeId: string, email: string, mobileNumber: string, password: string) => Promise<{ success: boolean; message: string }>;
   logout: () => void;
 }
 
@@ -19,10 +19,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check for stored user on mount
-    const storedUser = authService.getCurrentUser();
-    setUser(storedUser);
-    setIsLoading(false);
+    let cancelled = false;
+
+    async function validateSession() {
+      const storedUser = authService.getCurrentUser();
+      const token = authService.getToken();
+
+      // No stored session - nothing to validate.
+      if (!token || !storedUser) {
+        if (!cancelled) {
+          setUser(storedUser);
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      try {
+        // Ask the backend whether the JWT is still valid and get the fresh
+        // account record (role changes take effect immediately this way).
+        const freshUser = await authService.getMe();
+        authService.saveUser(freshUser);
+        if (!cancelled) {
+          setUser(freshUser);
+        }
+      } catch (error: any) {
+        if (error.response?.status === 401) {
+          // Account deleted/deactivated, or the database was reset (the mock
+          // DB is in-memory and wipes accounts on restart). Drop the stale
+          // session so the middleware stops bouncing /login to the dashboard.
+          authService.logout();
+          if (!cancelled) {
+            setUser(null);
+          }
+        } else {
+          // Backend unreachable - keep the stored user instead of logging
+          // someone out because the server happened to be down.
+          if (!cancelled) {
+            setUser(storedUser);
+          }
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    validateSession();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const login = async (employeeId: string, password: string) => {
@@ -40,18 +86,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const register = async (employeeId: string, email: string, mobileNumber: string, password: string) => {
-    try {
-      const response = await authService.register({ employeeId, email, mobileNumber, password });
-      return { success: response.success, message: response.message };
-    } catch (error: any) {
-      return {
-        success: false,
-        message: error.response?.data?.message || 'Registration failed. Please try again.',
-      };
-    }
-  };
-
   const logout = () => {
     authService.logout();
     setUser(null);
@@ -62,10 +96,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider
       value={{
         user,
-        isAuthenticated: !!user,
+        // Don't treat a stored user as authenticated while the session is
+        // still being validated - otherwise the login page would redirect
+        // away with a session that may already be stale.
+        isAuthenticated: !!user && !isLoading,
         isLoading,
+        isAdmin: user?.role === 'admin',
         login,
-        register,
         logout,
       }}
     >

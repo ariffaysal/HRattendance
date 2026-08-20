@@ -189,14 +189,8 @@ export default function LoginPage() {
           </form>
 
           <div className="mt-8 text-center">
-            <p className="text-slate-400">
-              Do not have an account?{' '}
-              <Link
-                href="/register"
-                className="text-cyan-400 hover:text-cyan-300 transition-colors font-medium"
-              >
-                Get Started
-              </Link>
+            <p className="text-slate-400 text-sm">
+              Accounts are created by your system administrator.
             </p>
           </div>
 

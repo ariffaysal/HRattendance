@@ -7,6 +7,7 @@ import { AuthService } from './auth.service';
 import { DatabaseModule } from '../../database/database.module';
 import { AuditModule } from '../audit/audit.module';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { RolesGuard } from './guards/roles.guard';
 
 @Module({
   imports: [
@@ -25,10 +26,17 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
   providers: [
     AuthService,
     JwtAuthGuard,
+    RolesGuard,
     // Apply JWT authentication globally; opt out per-route with @Public()
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
+    },
+    // Role checks run AFTER the JWT guard so request.user is populated.
+    // Routes without @Roles(...) are open to any authenticated user.
+    {
+      provide: APP_GUARD,
+      useClass: RolesGuard,
     },
   ],
   exports: [AuthService, JwtModule],
